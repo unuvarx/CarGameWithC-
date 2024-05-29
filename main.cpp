@@ -112,6 +112,7 @@ void instructions(); // Instructions menu
 void points(); // Points menu
 void loadGame(); // Load game menu
 void setTerminalSize(int width, int height); // Sets the terminal size
+void updatePoints(int points);
 
 int main() {
     // Set terminal size to 100x40
@@ -208,6 +209,9 @@ void moveAndDrawCars() {
             if (c.y < EXITY) {
                 temp.push(c);
                 drawCar(c, 2, 0); // Yeni pozisyonla aracı çiz
+            } else {
+                playingGame.points += (c.height * c.width); // Araba ekrandan çıktığında puanı topla
+                updatePoints(playingGame.points); // Puanları güncelle ve ekrana yaz
             }
         }
 
@@ -242,6 +246,7 @@ void moveAndDrawCars() {
 
 
 
+
 void* newGame(void *) {
     initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
     
@@ -265,6 +270,7 @@ void* newGame(void *) {
             } else if (key == ESC) {
                 playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
             }
+			 
         }
         usleep(GAMESLEEPRATE); // Sleep for a short period
     }
@@ -513,4 +519,12 @@ void points() {
 
 void loadGame() {
     // Load game logic here
+}
+
+void updatePoints(int points) {
+    // Temizle
+    mvhline(POINTY, POINTX, ' ', 20);
+    // Yaz
+    mvprintw(POINTY, POINTX, "Point: %d", points);
+    refresh();
 }
