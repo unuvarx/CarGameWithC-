@@ -9,7 +9,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-
+#include <fstream>
 #include <cstdlib> // Include for rand() and srand()
 #include <ctime> // Include for time()
 #include <chrono>
@@ -114,6 +114,8 @@ void loadGame(); // Load game menu
 void setTerminalSize(int width, int height); // Sets the terminal size
 void updatePoints(int points);
 bool checkCollision(Car playerCar, Car otherCar);
+void updatePointsFile(int points);
+
 int main() {
     // Set terminal size to 100x40
     setTerminalSize(wWidth, wHeight);
@@ -142,6 +144,9 @@ void setTerminalSize(int width, int height) {
     ws.ws_ypixel = 0;
     ioctl(STDOUT_FILENO, TIOCSWINSZ, &ws); // Set the terminal size
 }
+
+
+// SEFA
 Car createRandomCar(int id) {
     Car newCar;
     newCar.ID = id;
@@ -192,7 +197,7 @@ void initGame() {
     playingGame.current.clr = COLOROFCAR;
     playingGame.current.chr = '*';
 }
-
+// SEFA
 void moveAndDrawCars() {
     std::chrono::steady_clock::time_point lastEnqueueTime = std::chrono::steady_clock::now(); // Araç eklenme zamanını takip edin
     std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now(); // Oyun başlangıç zamanı
@@ -243,10 +248,6 @@ void moveAndDrawCars() {
 
 
 
-
-
-
-
 void* newGame(void *) {
     initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
 
@@ -269,6 +270,7 @@ void* newGame(void *) {
                 drawCar(playingGame.current, 2, 1); // Draw player's car with new position
             } else if (key == ESC) {
                 playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
+                updatePointsFile(playingGame.points); // Puanı dosyaya yaz
                 Menu(); // Return to the main menu
             }
 
@@ -279,6 +281,7 @@ void* newGame(void *) {
             while (!temp.empty()) {
                 if (checkCollision(playingGame.current, temp.front())) {
                     playingGame.IsGameRunning = false; // Oyunu sonlandır
+                    updatePointsFile(playingGame.points); // Puanı dosyaya yaz
                     Menu(); // Return to the main menu
                     break; // Döngüden çık
                 }
@@ -289,7 +292,6 @@ void* newGame(void *) {
     }
     return NULL;
 }
-
 
 
 void initWindow() {
@@ -316,7 +318,7 @@ void printWindow() {
         mvprintw(i, lineX, "#");
     }
 }
-
+// SEFA
 void drawCar(Car c, int type, int direction) {
 	
     if (playingGame.IsSaveCliked != true && playingGame.IsGameRunning == true) {
@@ -360,7 +362,7 @@ void drawCar(Car c, int type, int direction) {
 
 
 
-
+// SEFA
 void displayMenu(const char *menu[], int menuSize, int highlight) {
     clear();
     for (int i = 0; i < menuSize; ++i) {
@@ -383,7 +385,7 @@ void displayMenu(const char *menu[], int menuSize, int highlight) {
     refresh();
 }
 
-
+// SEFA
 void Menu() {
     int highlight = 0;
     int choice;
@@ -422,9 +424,10 @@ void Menu() {
                         points();
                         break;
                     case 5: // Exit
-                        playingGame.IsGameRunning = false;
-                        endwin();
-                        return;
+						playingGame.IsGameRunning = false;
+						endwin();
+						clear(); // Ekranı temizle
+						return;
                 }
                 break;
             case ESC:
@@ -526,15 +529,57 @@ void instructions() {
         }
     }
 }
-
+// SEFA
 void points() {
-    // Points display logic here
+    clear(); // Ekranı temizle
+    refresh(); // Ekranı güncelle
+
+    ifstream file(pointsTxt); // Dosyayı aç
+    if (file.is_open()) {
+        string line;
+        int gameNumber = 1;
+        int xCoordinate = 10; // Başlangıç x koordinatı
+        int yCoordinate = 10; // Başlangıç y koordinatı
+        // Dosyadan her satırı oku ve ekrana yaz
+        while (getline(file, line)) {
+            attron(COLOR_PAIR(1)); // Yeşil renk için renk çifti 1
+            mvprintw(yCoordinate, xCoordinate, "Game %d: %s", gameNumber, line.c_str());
+            attroff(COLOR_PAIR(1)); // Yeşil metni kapat
+            gameNumber++;
+            yCoordinate++; // Sonraki satıra geç
+            if (yCoordinate >= wHeight - 1) { // Eğer ekranın altına ulaşıldıysa
+                yCoordinate = 10; // Y koordinatını başa al
+                xCoordinate += 20; // X koordinatını sağa kaydır
+                if (xCoordinate >= wWidth - 20) { // Eğer ekranın sağında yer kalmadıysa
+                    break; // Döngüden çık
+                }
+            }
+        }
+        file.close(); // Dosyayı kapat
+    } else {
+        // Dosya yoksa "No points..." yazdır
+        attron(COLOR_PAIR(1)); // Yeşil renk için renk çifti 1
+        mvprintw(10, 10, "No points...");
+        attroff(COLOR_PAIR(1)); // Yeşil metni kapat
+    }
+    refresh();
+
+    int key; // Tuş girişini tutmak için değişken
+    while (1) { // Sonsuz döngü
+        key = getch(); // Bir tuşa basılmasını bekler
+        if (key == ESC || key == ENTER) { // Eğer ESC ya da ENTER tuşuna basılırsa
+            Menu(); // Ana menüye geri dön
+        }
+    }
 }
+
+
 
 void loadGame() {
     // Load game logic here
 }
 
+// SEFA
 void updatePoints(int points) {
     // Temizle
     mvhline(POINTY, POINTX, ' ', 20);
@@ -543,6 +588,8 @@ void updatePoints(int points) {
     refresh();
 }
 
+
+// SEFA
 bool checkCollision(Car playerCar, Car otherCar) {
     // Araba koordinatlarını kontrol ederek çarpışmayı tespit et
     if ((playerCar.y + playerCar.height > otherCar.y) && 
@@ -552,4 +599,17 @@ bool checkCollision(Car playerCar, Car otherCar) {
         return true; // Çarpışma var
     }
     return false; // Çarpışma yok
+}
+
+
+// SEFA
+void updatePointsFile(int points) {
+    ofstream file(pointsTxt, ios::app); // Dosyayı aç ve dosyanın sonuna ekle modunda aç
+    if (file.is_open()) {
+        file << points << endl; // Puanı dosyaya yaz
+        file.close(); // Dosyayı kapat
+    } else {
+        // Dosya açılamazsa bir hata mesajı yazdırabiliriz
+        cout << "Unable to open points.txt file for writing!" << endl;
+    }
 }
