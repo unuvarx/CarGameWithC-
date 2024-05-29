@@ -113,7 +113,7 @@ void points(); // Points menu
 void loadGame(); // Load game menu
 void setTerminalSize(int width, int height); // Sets the terminal size
 void updatePoints(int points);
-
+bool checkCollision(Car playerCar, Car otherCar);
 int main() {
     // Set terminal size to 100x40
     setTerminalSize(wWidth, wHeight);
@@ -249,7 +249,7 @@ void moveAndDrawCars() {
 
 void* newGame(void *) {
     initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
-    
+
     pthread_t carThread;
     pthread_create(&carThread, NULL, reinterpret_cast<void* (*)(void*)>(moveAndDrawCars), NULL);
 
@@ -269,13 +269,27 @@ void* newGame(void *) {
                 drawCar(playingGame.current, 2, 1); // Draw player's car with new position
             } else if (key == ESC) {
                 playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
+                Menu(); // Return to the main menu
             }
-			 
+
+            // Check collision with other cars
+            pthread_mutex_lock(&playingGame.mutexFile);
+            queue<Car> temp = playingGame.cars;
+            pthread_mutex_unlock(&playingGame.mutexFile);
+            while (!temp.empty()) {
+                if (checkCollision(playingGame.current, temp.front())) {
+                    playingGame.IsGameRunning = false; // Oyunu sonlandır
+                    Menu(); // Return to the main menu
+                    break; // Döngüden çık
+                }
+                temp.pop(); // Kuyruktaki bir sonraki arabaya geç
+            }
         }
         usleep(GAMESLEEPRATE); // Sleep for a short period
     }
     return NULL;
 }
+
 
 
 void initWindow() {
@@ -527,4 +541,15 @@ void updatePoints(int points) {
     // Yaz
     mvprintw(POINTY, POINTX, "Point: %d", points);
     refresh();
+}
+
+bool checkCollision(Car playerCar, Car otherCar) {
+    // Araba koordinatlarını kontrol ederek çarpışmayı tespit et
+    if ((playerCar.y + playerCar.height > otherCar.y) && 
+        (playerCar.y < otherCar.y + otherCar.height) &&
+        (playerCar.x + playerCar.width > otherCar.x) && 
+        (playerCar.x < otherCar.x + otherCar.width)) {
+        return true; // Çarpışma var
+    }
+    return false; // Çarpışma yok
 }
