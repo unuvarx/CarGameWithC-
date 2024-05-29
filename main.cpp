@@ -10,6 +10,13 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 
+#include <cstdlib> // Include for rand() and srand()
+#include <ctime> // Include for time()
+#include <chrono>
+#include <thread>
+
+
+
 #define wHeight 40 // height of the road
 #define wWidth 100 // width of the road
 #define lineX 45 // x coordinate of the middle line
@@ -112,7 +119,7 @@ int main() {
 
     playingGame.leftKey = leftKeyArrow;
     playingGame.rightKey = RightKeyArrow;
-    initGame();
+    // initGame(); // Bu çağrıyı kaldırıyoruz
     initWindow();
 
     start_color();
@@ -125,6 +132,7 @@ int main() {
     return 0;
 }
 
+
 void setTerminalSize(int width, int height) {
     struct winsize ws;
     ws.ws_col = width;
@@ -133,11 +141,42 @@ void setTerminalSize(int width, int height) {
     ws.ws_ypixel = 0;
     ioctl(STDOUT_FILENO, TIOCSWINSZ, &ws); // Set the terminal size
 }
+Car createRandomCar(int id) {
+    Car newCar;
+    newCar.ID = id;
+    
+    // Arabanın genişliği ve en sağ/en sol sınırları hesaplanıyor
+    int carWidth = MINW + rand() % (MINW + 5);
+    int leftBound = MINX + carWidth;
+    int rightBound = wWidth - MINX - carWidth;
+    
+    // Ortadaki şeridin x koordinatı
+    int middleLineX = lineX;
+    
+    // Arabanın x koordinatını belirlerken şerit çizgilerine ve orta şeride denk gelmemesi için sınırları kullan
+    while (true) {
+        newCar.x = leftBound + rand() % (rightBound - leftBound);
+        // Arabanın x koordinatı orta şeridin x koordinatından belirli bir uzaklıkta olmalı
+        if (abs(newCar.x - middleLineX) > carWidth + 1) { // +1 farklılık sağlamak için
+            break;
+        }
+    }
+    
+    newCar.y = -MINY; // Start above the screen
+    newCar.height = MINH + rand() % (MINH + 5); // Random height
+    newCar.width = carWidth; // Belirlenen genişlik
+    newCar.speed = 1 + rand() % 3; // Random speed
+    newCar.clr = 1 + rand() % numOfcolors; // Random color
+    newCar.isExist = true;
+    newCar.chr = '*'; // Car character
+    return newCar;
+}
 
 void initGame() {
+    srand(time(0)); // Seed random number generator
     playingGame.cars = queue<Car>();
     playingGame.counter = IDSTART;
-    playingGame.mutexFile = PTHREAD_MUTEX_INITIALIZER; // assigns the initial value for the mutex
+    playingGame.mutexFile = PTHREAD_MUTEX_INITIALIZER; // Assign the initial value for the mutex
     playingGame.level = 1;
     playingGame.moveSpeed = ISPEED;
     playingGame.points = 0;
@@ -153,7 +192,62 @@ void initGame() {
     playingGame.current.chr = '*';
 }
 
-void *newGame(void *) {
+void moveAndDrawCars() {
+    std::chrono::steady_clock::time_point lastEnqueueTime = std::chrono::steady_clock::now(); // Araç eklenme zamanını takip edin
+    std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now(); // Oyun başlangıç zamanı
+    int initialCarsDisplayed = 0; // Ekrana çıkartılan ilk araçların sayısı
+
+    while (playingGame.IsGameRunning) {
+        pthread_mutex_lock(&playingGame.mutexFile); // Mutex'i kilitler
+        queue<Car> temp;
+        while (!playingGame.cars.empty()) {
+            Car c = playingGame.cars.front();
+            playingGame.cars.pop();
+            drawCar(c, 1, 0); // Aracı ekrandan kaldır
+            c.y += c.speed; // Y pozisyonunu güncelle
+            if (c.y < EXITY) {
+                temp.push(c);
+                drawCar(c, 2, 0); // Yeni pozisyonla aracı çiz
+            }
+        }
+
+        // Şu anki zaman ve son araç eklenme zamanını kontrol edin
+        auto now = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - lastEnqueueTime).count();
+        auto initialDuration = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
+
+        // İlk 5 aracı 4 saniye arayla ekrana çıkar
+        if (initialCarsDisplayed < maxCarNumber) {
+            if (initialDuration >= 4 * initialCarsDisplayed && duration >= 4) {
+                temp.push(createRandomCar(playingGame.counter++));
+                lastEnqueueTime = now; // Son eklenme zamanını güncelle
+                initialCarsDisplayed++;
+            }
+        } else {
+            // 4 saniye geçtiyse yeni bir araç oluşturun
+            if (duration >= 4 && temp.size() < maxCarNumber) {
+                temp.push(createRandomCar(playingGame.counter++));
+                lastEnqueueTime = now; // Son eklenme zamanını güncelle
+            }
+        }
+
+        playingGame.cars = temp;
+        pthread_mutex_unlock(&playingGame.mutexFile); // Mutex'i açar
+        usleep(playingGame.moveSpeed); // Bir süre uyur
+    }
+}
+
+
+
+
+
+
+void* newGame(void *) {
+    initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
+    
+    pthread_t carThread;
+    pthread_create(&carThread, NULL, reinterpret_cast<void* (*)(void*)>(moveAndDrawCars), NULL);
+
     printWindow();
     drawCar(playingGame.current, 2, 1); // Draw the car the player is driving on the screen
     int key;
@@ -168,11 +262,13 @@ void *newGame(void *) {
                 drawCar(playingGame.current, 1, 1); // Removes player's car from screen
                 playingGame.current.x += playingGame.current.speed; // Update position
                 drawCar(playingGame.current, 2, 1); // Draw player's car with new position
+            } else if (key == ESC) {
+                playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
             }
         }
-        usleep(GAMESLEEPRATE); // Sleep
+        usleep(GAMESLEEPRATE); // Sleep for a short period
     }
-    return 0;
+    return NULL;
 }
 
 
@@ -186,6 +282,7 @@ void initWindow() {
     noecho();             // don't echo characters entered by the user
     clear();              // clear the screen
     sleep(1);
+	 timeout(0); // Non-blocking getch()
 }
 
 void printWindow() {
@@ -201,32 +298,48 @@ void printWindow() {
 }
 
 void drawCar(Car c, int type, int direction) {
-    // If the user does not want to exit the game and the game continues
+	
     if (playingGame.IsSaveCliked != true && playingGame.IsGameRunning == true) {
-        init_pair(c.ID, c.clr, 0); // Creates a color pair: init_pair(short pair ID, short foregroundcolor, short backgroundcolor);
-        attron(COLOR_PAIR(c.ID)); // enable color pair
         char drawnChar;
         if (type == 1)
-            drawnChar = ' '; // to remove car
+            drawnChar = ' ';
         else
-            drawnChar = c.chr; // to draw char
-        mvhline(c.y, c.x, drawnChar, c.width); // top line of rectangle
-        mvhline(c.y + c.height - 1, c.x, drawnChar, c.width); // bottom line of rectangle
-        if (direction == 0) // If it is any car on the road
-            mvhline(c.y + c.height, c.x, drawnChar, c.width);
-        else // player's car
-            mvhline(c.y - 1, c.x, drawnChar, c.width);
-        mvvline(c.y, c.x, drawnChar, c.height); // left line of rectangle
-        mvvline(c.y, c.x + c.width - 1, drawnChar, c.height); // right line of rectangle
-        char text[5];
-        if (type == 1)
-            sprintf(text, "  "); // to remove point
-        else
-            sprintf(text, "%d", c.height * c.width); // to show car's point in rectangle
-        mvprintw(c.y + 1, c.x + 1, text); // display car's point in rectangle
-        attroff(COLOR_PAIR(c.ID)); // disable color pair
+            drawnChar = c.chr;
+
+        // Eski konumu temizle
+        mvhline(c.y, c.x, ' ', c.width);
+        mvhline(c.y + c.height - 1, c.x, ' ', c.width);
+        mvvline(c.y, c.x, ' ', c.height);
+        mvvline(c.y, c.x + c.width - 1, ' ', c.height);
+       int textLength = 2; // Varsayılan metin uzunluğu
+		if ((c.height * c.width) >= numOfChars) {
+			textLength = 3; // Metin uzunluğunu 3 olarak ayarla
+		}
+		for (int i = 0; i < textLength; ++i) {
+			mvprintw(c.y + 1, c.x + 1 + i, " "); // Metni temizle
+		} // Metni temizle
+
+        // Yeni konumu çiz
+        init_pair(c.ID, c.clr, 0); // Renk çiftini burada çağırıyoruz
+        attron(COLOR_PAIR(c.ID)); // Renk çiftini aktifleştiriyoruz
+        mvhline(c.y, c.x, drawnChar, c.width);
+        mvhline(c.y + c.height - 1, c.x, drawnChar, c.width);
+        mvvline(c.y, c.x, drawnChar, c.height);
+        mvvline(c.y, c.x + c.width - 1, drawnChar, c.height);
+
+        // Metni yaz, ancak arabaların boyutlarına göre kontrol et
+        if (type != 1 && (c.height * c.width) >= numOfChars) {
+            mvprintw(c.y + 1, c.x + 1, "%d", c.height * c.width);
+        }
+
+        attroff(COLOR_PAIR(c.ID)); // Renk çiftini kapatıyoruz
     }
 }
+
+
+
+
+
 
 void displayMenu(const char *menu[], int menuSize, int highlight) {
     clear();
@@ -365,7 +478,7 @@ void settingsMenu() {
     }
 }
 
-
+  
 // SEFA
 void displayInstructions() {
     clear();
@@ -380,7 +493,7 @@ void displayInstructions() {
 
 
 
-
+  
 // SEFA
 void instructions() {
     displayInstructions();
