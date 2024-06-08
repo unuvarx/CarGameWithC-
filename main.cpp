@@ -147,13 +147,13 @@ void setTerminalSize(int width, int height) {
 }
 
 
-// SEFA
+// SENA
 Car createRandomCar(int id) {
     Car newCar;
     newCar.ID = id;
     
     // Arabanın genişliği ve en sağ/en sol sınırları hesaplanıyor
-    int carWidth = MINW + rand() % (MINW + 5);
+    int carWidth = MINW + rand() % (7- MINW+1 );
     int leftBound = MINX + carWidth;
     int rightBound = wWidth - MINX - carWidth;
     
@@ -168,14 +168,24 @@ Car createRandomCar(int id) {
             break;
         }
     }
-    
     newCar.y = -MINY; // Start above the screen
-    newCar.height = MINH + rand() % (MINH + 5); // Random height
+    newCar.height = MINH + rand() % (7-MINH+1); // Random height between 5-7
     newCar.width = carWidth; // Belirlenen genişlik
-    newCar.speed = 1 + rand() % 3; // Random speed
+    newCar.speed = newCar.height/2; // Arabanın hızı, uzunluğunun yarısı
     newCar.clr = 1 + rand() % numOfcolors; // Random color
     newCar.isExist = true;
-    newCar.chr = '*'; // Car character
+    int ch= rand()%(3-1+1)+1; // Random number between 1-3 so we can pick the char of the car
+    switch(ch){
+	case 1:
+            newCar.chr = '*';
+            break; // Car character
+        case 2:
+            newCar.chr = '+';
+            break; // Car character
+        case 3:
+            newCar.chr = '#';
+            break; // Car character
+    }
     return newCar;
 }
 
