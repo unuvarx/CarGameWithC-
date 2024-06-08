@@ -217,6 +217,14 @@ void moveAndDrawCars() {
                 drawCar(c, 2, 0); // Yeni pozisyonla aracı çiz
             } else {
                 playingGame.points += (c.height * c.width); // Araba ekrandan çıktığında puanı topla
+		    
+		if (playingGame.level < MAXSLEVEL){ // If the car hasn't reached max level {
+			if (playingGame.points > (levelBound)*playingGame.level) { // After every 300 points earned
+				playingGame.level += 1; // level is increased by 1 
+				playingGame.moveSpeed -= DRATESPEED;  // and moveSpeed of the game is reduced by 100000
+			}
+		}
+		    
                 updatePoints(playingGame.points); // Puanları güncelle ve ekrana yaz
             }
         }
@@ -326,15 +334,16 @@ void printWindow() {
     }
     int j = 5;
     for (int i = 1; i < 4; i++) {
-	attron(COLOR_PAIR(1)); // Color pairing for green
+	attron(COLOR_PAIR(1));    // Color pairing for green
         mvprintw(j, wWidth + 7, "*");
-        mvprintw(j+1, wWidth + 6, "* *"); 
+        mvprintw(j+1, wWidth + 6, "* *");      // The leaves of the trees
 	mvprintw(j+2, wWidth + 5, "* * *");
-        attroff(COLOR_PAIR(1)); // Color green turned off
-	attron(COLOR_PAIR(3));  // Color pairing for red
-        mvprintw(j+3, wWidth + 7, "#");
+        attroff(COLOR_PAIR(1));    // Color green turned off
+	
+	attron(COLOR_PAIR(3));     // Color pairing for red
+        mvprintw(j+3, wWidth + 7, "#");    // The tree trunk
 	mvprintw(j+4, wWidth + 7, "#");
-        attroff(COLOR_PAIR(3)); // Color red turned off
+        attroff(COLOR_PAIR(3));    // Color red turned off
         j +=10;
     }
 }
