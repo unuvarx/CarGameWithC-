@@ -115,6 +115,7 @@ void setTerminalSize(int width, int height); // Sets the terminal size
 void updatePoints(int points);
 bool checkCollision(Car playerCar, Car otherCar);
 void updatePointsFile(int points);
+void saveGame(Game savedGame);  // Saves the info in the global variable neccessary to load the last name
 
 int main() {
     // Set terminal size to 100x40
@@ -272,6 +273,12 @@ void* newGame(void *) {
                 playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
                 updatePointsFile(playingGame.points); // Puanı dosyaya yaz
                 Menu(); // Return to the main menu
+            }  else if (key == SAVEKEY){  // If the S key is pressed
+                playingGame.IsSaveCliked = true;  
+                playingGame.IsGameRunning = false; 
+                updatePointsFile(playingGame.points);
+                saveGame(playingGame); // Saves the info neccessary to load the game back
+                Menu(); // Return to the main menu
             }
 
             // Check collision with other cars
@@ -306,7 +313,7 @@ void initWindow() {
     sleep(1);
 	 timeout(0); // Non-blocking getch()
 }
-
+// SENA
 void printWindow() {
     for (int i = 1; i < wHeight - 1; ++i) {
         mvprintw(i, 2, "*"); // left side of the road
@@ -317,7 +324,21 @@ void printWindow() {
     for (int i = lineLEN; i < wHeight - lineLEN; ++i) { // line in the middle of the road
         mvprintw(i, lineX, "#");
     }
+    int j = 5;
+    for (int i = 1; i < 4; i++) {
+	attron(COLOR_PAIR(1)); // Color pairing for green
+        mvprintw(j, wWidth + 7, "*");
+        mvprintw(j+1, wWidth + 6, "* *"); 
+	mvprintw(j+2, wWidth + 5, "* * *");
+        attroff(COLOR_PAIR(1)); // Color green turned off
+	attron(COLOR_PAIR(3));  // Color pairing for red
+        mvprintw(j+3, wWidth + 7, "#");
+	mvprintw(j+4, wWidth + 7, "#");
+        attroff(COLOR_PAIR(3)); // Color red turned off
+        j +=10;
+    }
 }
+
 // SEFA
 void drawCar(Car c, int type, int direction) {
 	
@@ -424,10 +445,10 @@ void Menu() {
                         points();
                         break;
                     case 5: // Exit
-						playingGame.IsGameRunning = false;
-						endwin();
-						clear(); // Ekranı temizle
-						return;
+			 playingGame.IsGameRunning = false;
+			 endwin();
+			 clear(); // Ekranı temizle
+			 return;
                 }
                 break;
             case ESC:
@@ -439,6 +460,35 @@ void Menu() {
         }
     }
 }
+
+// SENA
+void saveGame(Game savedGame) {
+    fstream carsFile(CarsTxt, ios::out | ios::binary); // Open file for writing in binary form
+    if (carsFile.is_open()) {  // Check for opening errors
+	// Needs to be filled with the info of the cars already in trafic 
+        carsFile.close();
+    }
+    else {
+        cout << "Cars.txt file cannot be opened!!" << endl;  
+    }
+    
+    fstream gameFile(gameTxt, ios::out | ios::binary);   // Open file for writing in binary form
+    if (gameFile.is_open()) {
+        gameFile.write(reinterpret_cast<char*>(&savedGame), sizeof(Game)); // Save the Game struct info on the file in binary
+        gameFile.close();
+    }
+    else {
+        cout << "Game.txt file cannot be opened!!" << endl;
+    }
+}
+
+void loadGame() {
+    // Load game logic here
+}
+
+
+
+
 
 // SEFA
 void displaySettingsMenu(int highlight) {
@@ -575,9 +625,7 @@ void points() {
 
 
 
-void loadGame() {
-    // Load game logic here
-}
+
 
 // SEFA
 void updatePoints(int points) {
