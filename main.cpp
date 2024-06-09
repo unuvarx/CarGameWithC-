@@ -216,8 +216,8 @@ void moveAndDrawCars() {
     std::chrono::steady_clock::time_point lastEnqueueTime = std::chrono::steady_clock::now(); // Araç eklenme zamanını takip edin
     std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now(); // Oyun başlangıç zamanı
     int initialCarsDisplayed = 0; // Ekrana çıkartılan ilk araçların sayısı
-
-    while (playingGame.IsGameRunning) {
+    queue<Car> ontheRoad;
+    while (playingGame.IsGameRunning && playingGame.IsSaveCliked != true) {
         pthread_mutex_lock(&playingGame.mutexFile); // Mutex'i kilitler
         queue<Car> temp;
         while (!playingGame.cars.empty()) {
@@ -226,9 +226,11 @@ void moveAndDrawCars() {
             drawCar(c, 1, 0); // Aracı ekrandan kaldır
             c.y += c.speed; // Y pozisyonunu güncelle
             if (c.y < EXITY) {
+		ontheRoad.push(c);
                 temp.push(c);
                 drawCar(c, 2, 0); // Yeni pozisyonla aracı çiz
             } else {
+		ontheRoad.pop();
                 playingGame.points += (c.height * c.width); // Araba ekrandan çıktığında puanı topla
 		    
 		if (playingGame.level < MAXSLEVEL){ // If the car hasn't reached max level {
@@ -261,8 +263,16 @@ void moveAndDrawCars() {
                 lastEnqueueTime = now; // Son eklenme zamanını güncelle
             }
         }
+	if (playingGame.counter > IDMAX) {   // If the cars ID exceeds 20, it's set back to 10
+                playingGame.counter = IDSTART;
+	}
+        
+	playingGame.cars = temp;
+        
+	if (playingGame.IsSaveCliked == true) {
+                playingGame.cars = ontheRoad;  // Takes the list of cars on the traffic when the game was saved
+        }
 
-        playingGame.cars = temp;
         pthread_mutex_unlock(&playingGame.mutexFile); // Mutex'i açar
         usleep(playingGame.moveSpeed); // Bir süre uyur
     }
@@ -298,7 +308,10 @@ void* newGame(void *) {
                 playingGame.IsSaveCliked = true;  
                 playingGame.IsGameRunning = false; 
                 updatePointsFile(playingGame.points);
-                saveGame(playingGame); // Saves the info neccessary to load the game back
+		
+		pthread_mutex_lock(&playingGame.mutexFile);
+                saveGame(playingGame);   // Saves the info neccessary to load the game back
+                pthread_mutex_unlock(&playingGame.mutexFile);
                 Menu(); // Return to the main menu
             }
 
@@ -483,12 +496,20 @@ void Menu() {
     }
 }
 
+
+
+
+
 // SENA
 void saveGame(Game savedGame) {
     fstream carsFile(CarsTxt, ios::out | ios::binary); // Open file for writing in binary form
     if (carsFile.is_open()) {  // Check for opening errors
-	// Needs to be filled with the info of the cars already in trafic 
-        carsFile.close();
+	    while (!savedGame.cars.empty()) {
+		    Car c = savedGame.cars.front(); // Takes the cars in trafic one by one
+		    savedGame.cars.pop();
+		    carsFile.write(reinterpret_cast<char*>(&c), sizeof(Car)); // And writes the info on Cars.txt file
+	    }
+	    carsFile.close();
     }
     else {
         cout << "Cars.txt file cannot be opened!!" << endl;  
