@@ -147,7 +147,8 @@ void setTerminalSize(int width, int height) {
 }
 
 
-// SEFA
+
+// SENA - SEFA
 Car createRandomCar(int id) {
     Car newCar;
     newCar.ID = id;
@@ -168,13 +169,26 @@ Car createRandomCar(int id) {
             break;
         }
     }
+    
     newCar.y = -MINY; // Start above the screen
     newCar.height = MINH + rand() % (7-MINH+1); // Random height between 5-7
     newCar.width = carWidth; // Belirlenen genişlik
     newCar.speed = newCar.height/2; // Arabanın hızı, uzunluğunun yarısı
     newCar.clr = 1 + rand() % numOfcolors; // Random color
     newCar.isExist = true;
-    newCar.chr = '*'; // Car character
+	
+    int ch= rand()%(3-1+1)+1; // Random number between 1-3 so we can pick the char of the car
+    switch(ch){
+	case 1:
+            newCar.chr = '*';
+            break; // Car character
+        case 2:
+            newCar.chr = '+';
+            break; // Car character
+        case 3:
+            newCar.chr = '#';
+            break; // Car character
+    }
     return newCar;
 }
 
@@ -265,7 +279,7 @@ void moveAndDrawCars() {
 }
 
 
-
+// SENA - SEFA
 void* newGame(void *) {
     initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
 
