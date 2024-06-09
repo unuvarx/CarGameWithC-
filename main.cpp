@@ -110,12 +110,13 @@ void Menu(); // Main menu
 void settingsMenu(); // Settings menu
 void instructions(); // Instructions menu
 void points(); // Points menu
-void loadGame(); // Load game menu
+void *loadGame(void *); // Load game menu
 void setTerminalSize(int width, int height); // Sets the terminal size
 void updatePoints(int points);
 bool checkCollision(Car playerCar, Car otherCar);
 void updatePointsFile(int points);
-
+void saveGame(Game savedGame);  // Saves the info in the global variable neccessary to load the last name
+void lastGame(Game savedGame); // Assigns the saved values to all control parameters for the new game
 int main() {
     // Set terminal size to 100x40
     setTerminalSize(wWidth, wHeight);
@@ -146,13 +147,14 @@ void setTerminalSize(int width, int height) {
 }
 
 
-// SEFA
+
+// SENA - SEFA
 Car createRandomCar(int id) {
     Car newCar;
     newCar.ID = id;
     
     // Arabanın genişliği ve en sağ/en sol sınırları hesaplanıyor
-    int carWidth = MINW + rand() % (MINW + 5);
+    int carWidth = MINW + rand() % (7- MINW+1 );
     int leftBound = MINX + carWidth;
     int rightBound = wWidth - MINX - carWidth;
     
@@ -169,12 +171,24 @@ Car createRandomCar(int id) {
     }
     
     newCar.y = -MINY; // Start above the screen
-    newCar.height = MINH + rand() % (MINH + 5); // Random height
+    newCar.height = MINH + rand() % (7-MINH+1); // Random height between 5-7
     newCar.width = carWidth; // Belirlenen genişlik
-    newCar.speed = 1 + rand() % 3; // Random speed
+    newCar.speed = newCar.height/2; // Arabanın hızı, uzunluğunun yarısı
     newCar.clr = 1 + rand() % numOfcolors; // Random color
     newCar.isExist = true;
-    newCar.chr = '*'; // Car character
+	
+    int ch= rand()%(3-1+1)+1; // Random number between 1-3 so we can pick the char of the car
+    switch(ch){
+	case 1:
+            newCar.chr = '*';
+            break; // Car character
+        case 2:
+            newCar.chr = '+';
+            break; // Car character
+        case 3:
+            newCar.chr = '#';
+            break; // Car character
+    }
     return newCar;
 }
 
@@ -202,8 +216,8 @@ void moveAndDrawCars() {
     std::chrono::steady_clock::time_point lastEnqueueTime = std::chrono::steady_clock::now(); // Araç eklenme zamanını takip edin
     std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now(); // Oyun başlangıç zamanı
     int initialCarsDisplayed = 0; // Ekrana çıkartılan ilk araçların sayısı
-
-    while (playingGame.IsGameRunning) {
+    queue<Car> ontheRoad;
+    while (playingGame.IsGameRunning && playingGame.IsSaveCliked != true) {
         pthread_mutex_lock(&playingGame.mutexFile); // Mutex'i kilitler
         queue<Car> temp;
         while (!playingGame.cars.empty()) {
@@ -212,10 +226,20 @@ void moveAndDrawCars() {
             drawCar(c, 1, 0); // Aracı ekrandan kaldır
             c.y += c.speed; // Y pozisyonunu güncelle
             if (c.y < EXITY) {
+		ontheRoad.push(c);
                 temp.push(c);
                 drawCar(c, 2, 0); // Yeni pozisyonla aracı çiz
             } else {
+		ontheRoad.pop();
                 playingGame.points += (c.height * c.width); // Araba ekrandan çıktığında puanı topla
+		    
+		if (playingGame.level < MAXSLEVEL){ // If the car hasn't reached max level {
+			if (playingGame.points > (levelBound)*playingGame.level) { // After every 300 points earned
+				playingGame.level += 1; // level is increased by 1 
+				playingGame.moveSpeed -= DRATESPEED;  // and moveSpeed of the game is reduced by 100000
+			}
+		}
+		    
                 updatePoints(playingGame.points); // Puanları güncelle ve ekrana yaz
             }
         }
@@ -239,15 +263,23 @@ void moveAndDrawCars() {
                 lastEnqueueTime = now; // Son eklenme zamanını güncelle
             }
         }
+	if (playingGame.counter > IDMAX) {   // If the cars ID exceeds 20, it's set back to 10
+                playingGame.counter = IDSTART;
+	}
+        
+	playingGame.cars = temp;
+        
+	if (playingGame.IsSaveCliked == true) {
+                playingGame.cars = ontheRoad;  // Takes the list of cars on the traffic when the game was saved
+        }
 
-        playingGame.cars = temp;
         pthread_mutex_unlock(&playingGame.mutexFile); // Mutex'i açar
         usleep(playingGame.moveSpeed); // Bir süre uyur
     }
 }
 
 
-
+// SENA - SEFA
 void* newGame(void *) {
     initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
 
@@ -271,6 +303,15 @@ void* newGame(void *) {
             } else if (key == ESC) {
                 playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
                 updatePointsFile(playingGame.points); // Puanı dosyaya yaz
+                Menu(); // Return to the main menu
+            }  else if (key == SAVEKEY){  // If the S key is pressed
+                playingGame.IsSaveCliked = true;  
+                playingGame.IsGameRunning = false; 
+                updatePointsFile(playingGame.points);
+		
+		pthread_mutex_lock(&playingGame.mutexFile);
+                saveGame(playingGame);   // Saves the info neccessary to load the game back
+                pthread_mutex_unlock(&playingGame.mutexFile);
                 Menu(); // Return to the main menu
             }
 
@@ -306,7 +347,7 @@ void initWindow() {
     sleep(1);
 	 timeout(0); // Non-blocking getch()
 }
-
+// SENA
 void printWindow() {
     for (int i = 1; i < wHeight - 1; ++i) {
         mvprintw(i, 2, "*"); // left side of the road
@@ -317,7 +358,22 @@ void printWindow() {
     for (int i = lineLEN; i < wHeight - lineLEN; ++i) { // line in the middle of the road
         mvprintw(i, lineX, "#");
     }
+    int j = 5;
+    for (int i = 1; i < 4; i++) {
+	attron(COLOR_PAIR(1));    // Color pairing for green
+        mvprintw(j, wWidth + 7, "*");
+        mvprintw(j+1, wWidth + 6, "* *");      // The leaves of the trees
+	mvprintw(j+2, wWidth + 5, "* * *");
+        attroff(COLOR_PAIR(1));    // Color green turned off
+	
+	attron(COLOR_PAIR(3));     // Color pairing for red
+        mvprintw(j+3, wWidth + 7, "#");    // The tree trunk
+	mvprintw(j+4, wWidth + 7, "#");
+        attroff(COLOR_PAIR(3));    // Color red turned off
+        j +=10;
+    }
 }
+
 // SEFA
 void drawCar(Car c, int type, int direction) {
 	
@@ -412,7 +468,12 @@ void Menu() {
                         pthread_join(th1, NULL);
                         break;
                     case 1: // Load Game
-                        loadGame();
+                        inMenu = false;
+                        clear();
+                        refresh();
+                        pthread_t th2;
+                        pthread_create(&th2, NULL, loadGame, NULL);
+                        pthread_join(th2, NULL);
                         break;
                     case 2: // Instructions
                         instructions();
@@ -424,10 +485,10 @@ void Menu() {
                         points();
                         break;
                     case 5: // Exit
-						playingGame.IsGameRunning = false;
-						endwin();
-						clear(); // Ekranı temizle
-						return;
+			 playingGame.IsGameRunning = false;
+			 endwin();
+			 clear(); // Ekranı temizle
+			 return;
                 }
                 break;
             case ESC:
@@ -439,6 +500,148 @@ void Menu() {
         }
     }
 }
+
+
+
+
+
+// SENA
+void saveGame(Game savedGame) {
+    fstream carsFile(CarsTxt, ios::out | ios::binary); // Open file for writing in binary form
+    if (carsFile.is_open()) {  // Check for opening errors
+	    while (!savedGame.cars.empty()) {
+		    Car c = savedGame.cars.front(); // Takes the cars in trafic one by one
+		    savedGame.cars.pop();
+		    carsFile.write(reinterpret_cast<char*>(&c), sizeof(Car)); // And writes the info on Cars.txt file
+	    }
+	    carsFile.close();
+    }
+    else {
+        cout << "Cars.txt file cannot be opened!!" << endl;  
+    }
+    
+    fstream gameFile(gameTxt, ios::out | ios::binary);   // Open file for writing in binary form
+    if (gameFile.is_open()) {
+        gameFile.write(reinterpret_cast<char*>(&savedGame), sizeof(Game)); // Save the Game struct info on the file in binary
+        gameFile.close();
+    }
+    else {
+        cout << "Game.txt file cannot be opened!!" << endl;
+    }
+}
+
+
+
+
+// SENA
+void lastGame(Game savedGame) {
+    srand(time(0)); // Seed random number generator
+    playingGame.cars = queue<Car>();
+    playingGame.counter = savedGame.counter;
+    playingGame.mutexFile = savedGame.mutexFile;// Assign the initial value for the mutex
+    playingGame.level = savedGame.level;
+    playingGame.moveSpeed = savedGame.moveSpeed;
+    playingGame.points = savedGame.points;
+    playingGame.IsSaveCliked = false;
+    playingGame.IsGameRunning = true;
+    playingGame.current.ID = savedGame.current.ID;
+    playingGame.current.height = savedGame.current.height;
+    playingGame.current.width = savedGame.current.width;
+    playingGame.current.speed = savedGame.current.speed;
+    playingGame.current.x = savedGame.current.x;
+    playingGame.current.y = savedGame.current.y;
+    playingGame.current.clr = savedGame.current.clr;
+    playingGame.current.chr = savedGame.current.chr;
+
+
+}
+
+// SENA
+void* loadGame(void*) {
+
+    fstream gameFile(gameTxt, ios:: in | ios::binary);
+    gameFile.seekg(0, ios::end);
+    int size = gameFile.tellg();
+    if (size != 0 ) {
+        if (gameFile.is_open()) {
+            gameFile.read(reinterpret_cast<char*>(&playingGame), sizeof(Game));
+            gameFile.close();
+        }
+        lastGame(playingGame);
+
+        fstream carsFile(CarsTxt, ios::in | ios::binary);
+        if (carsFile.is_open()) {
+
+            while (carsFile.peek() != EOF) {
+                Car c;
+                carsFile.read(reinterpret_cast<char*>(&c), sizeof(Car));
+                playingGame.cars.push(c);
+            }
+            carsFile.close();
+        }
+    }
+    else {
+        initGame();
+    }
+
+    pthread_t newGameThread;
+    pthread_create(&newGameThread, NULL, reinterpret_cast<void* (*)(void*)>(moveAndDrawCars), NULL);
+    
+    pthread_mutex_lock(&playingGame.mutexFile);
+    printWindow();
+    drawCar(playingGame.current, 2, 1); // Draw the car the player is driving on the screen
+    pthread_mutex_unlock(&playingGame.mutexFile);
+	
+    int key;
+    while (playingGame.IsGameRunning) {// Continue until the game is over
+        key = getch(); // Get input for the player to press the arrow keys
+        if (key != KEYERROR) {
+            if (key == playingGame.leftKey) { // If the left key is pressed
+                drawCar(playingGame.current, 1, 1); // Removes player's car from screen
+                playingGame.current.x -= playingGame.current.speed; // Update position
+                drawCar(playingGame.current, 2, 1); // Draw player's car with new position
+            }
+            else if (key == playingGame.rightKey) { // If the right key is pressed
+                drawCar(playingGame.current, 1, 1); // Removes player's car from screen
+                playingGame.current.x += playingGame.current.speed; // Update position
+                drawCar(playingGame.current, 2, 1); // Draw player's car with new position
+            }
+            else if (key == ESC) {
+                playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
+                updatePointsFile(playingGame.points); // Puaný dosyaya yaz
+                Menu(); // Return to the main menu
+            }
+            else if (key == SAVEKEY) {  //Saves the game information if the S key is pressed
+                playingGame.IsSaveCliked = true;
+                playingGame.IsGameRunning = false;
+                updatePointsFile(playingGame.points);
+                pthread_mutex_lock(&playingGame.mutexFile);
+                saveGame(playingGame);
+                pthread_mutex_unlock(&playingGame.mutexFile);
+                Menu();
+            }
+
+            // Check collision with other cars
+            pthread_mutex_lock(&playingGame.mutexFile);
+            queue<Car> temp = playingGame.cars;
+            pthread_mutex_unlock(&playingGame.mutexFile);
+            while (!temp.empty()) {
+                if (checkCollision(playingGame.current, temp.front())) {
+                    playingGame.IsGameRunning = false; // Oyunu sonlandýr
+                    updatePointsFile(playingGame.points); // Puaný dosyaya yaz
+                    Menu(); // Return to the main menu
+                    break; // Döngüden çýk
+                }
+                temp.pop(); // Kuyruktaki bir sonraki arabaya geç
+            }
+        }
+        usleep(GAMESLEEPRATE); // Sleep for a short period
+    }
+    return NULL;
+    // Load game logic here
+}
+
+
 
 // SEFA
 void displaySettingsMenu(int highlight) {
@@ -575,9 +778,7 @@ void points() {
 
 
 
-void loadGame() {
-    // Load game logic here
-}
+
 
 // SEFA
 void updatePoints(int points) {
