@@ -110,13 +110,13 @@ void Menu(); // Main menu
 void settingsMenu(); // Settings menu
 void instructions(); // Instructions menu
 void points(); // Points menu
-void loadGame(); // Load game menu
+void *loadGame(void *); // Load game menu
 void setTerminalSize(int width, int height); // Sets the terminal size
 void updatePoints(int points);
 bool checkCollision(Car playerCar, Car otherCar);
 void updatePointsFile(int points);
 void saveGame(Game savedGame);  // Saves the info in the global variable neccessary to load the last name
-
+void lastGame(Game savedGame); // Assigns the saved values to all control parameters for the new game
 int main() {
     // Set terminal size to 100x40
     setTerminalSize(wWidth, wHeight);
@@ -468,7 +468,12 @@ void Menu() {
                         pthread_join(th1, NULL);
                         break;
                     case 1: // Load Game
-                        loadGame();
+                        inMenu = false;
+                        clear();
+                        refresh();
+                        pthread_t th2;
+                        pthread_create(&th2, NULL, loadGame, NULL);
+                        pthread_join(th2, NULL);
                         break;
                     case 2: // Instructions
                         instructions();
@@ -525,11 +530,116 @@ void saveGame(Game savedGame) {
     }
 }
 
-void loadGame() {
-    // Load game logic here
+
+
+
+// SENA
+void lastGame(Game savedGame) {
+    srand(time(0)); // Seed random number generator
+    playingGame.cars = queue<Car>();
+    playingGame.counter = savedGame.counter;
+    playingGame.mutexFile = savedGame.mutexFile;// Assign the initial value for the mutex
+    playingGame.level = savedGame.level;
+    playingGame.moveSpeed = savedGame.moveSpeed;
+    playingGame.points = savedGame.points;
+    playingGame.IsSaveCliked = false;
+    playingGame.IsGameRunning = true;
+    playingGame.current.ID = savedGame.current.ID;
+    playingGame.current.height = savedGame.current.height;
+    playingGame.current.width = savedGame.current.width;
+    playingGame.current.speed = savedGame.current.speed;
+    playingGame.current.x = savedGame.current.x;
+    playingGame.current.y = savedGame.current.y;
+    playingGame.current.clr = savedGame.current.clr;
+    playingGame.current.chr = savedGame.current.chr;
+
+
 }
 
+// SENA
+void* loadGame(void*) {
 
+    fstream gameFile(gameTxt, ios:: in | ios::binary);
+    gameFile.seekg(0, ios::end);
+    int size = gameFile.tellg();
+    if (size != 0 ) {
+        if (gameFile.is_open()) {
+            gameFile.read(reinterpret_cast<char*>(&playingGame), sizeof(Game));
+            gameFile.close();
+        }
+        lastGame(playingGame);
+
+        fstream carsFile(CarsTxt, ios::in | ios::binary);
+        if (carsFile.is_open()) {
+
+            while (carsFile.peek() != EOF) {
+                Car c;
+                carsFile.read(reinterpret_cast<char*>(&c), sizeof(Car));
+                playingGame.cars.push(c);
+            }
+            carsFile.close();
+        }
+    }
+    else {
+        initGame();
+    }
+
+    pthread_t newGameThread;
+    pthread_create(&newGameThread, NULL, reinterpret_cast<void* (*)(void*)>(moveAndDrawCars), NULL);
+    
+    pthread_mutex_lock(&playingGame.mutexFile);
+    printWindow();
+    drawCar(playingGame.current, 2, 1); // Draw the car the player is driving on the screen
+    pthread_mutex_unlock(&playingGame.mutexFile);
+	
+    int key;
+    while (playingGame.IsGameRunning) {// Continue until the game is over
+        key = getch(); // Get input for the player to press the arrow keys
+        if (key != KEYERROR) {
+            if (key == playingGame.leftKey) { // If the left key is pressed
+                drawCar(playingGame.current, 1, 1); // Removes player's car from screen
+                playingGame.current.x -= playingGame.current.speed; // Update position
+                drawCar(playingGame.current, 2, 1); // Draw player's car with new position
+            }
+            else if (key == playingGame.rightKey) { // If the right key is pressed
+                drawCar(playingGame.current, 1, 1); // Removes player's car from screen
+                playingGame.current.x += playingGame.current.speed; // Update position
+                drawCar(playingGame.current, 2, 1); // Draw player's car with new position
+            }
+            else if (key == ESC) {
+                playingGame.IsGameRunning = false; // Exit the game if ESC is pressed
+                updatePointsFile(playingGame.points); // Puaný dosyaya yaz
+                Menu(); // Return to the main menu
+            }
+            else if (key == SAVEKEY) {  //Saves the game information if the S key is pressed
+                playingGame.IsSaveCliked = true;
+                playingGame.IsGameRunning = false;
+                updatePointsFile(playingGame.points);
+                pthread_mutex_lock(&playingGame.mutexFile);
+                saveGame(playingGame);
+                pthread_mutex_unlock(&playingGame.mutexFile);
+                Menu();
+            }
+
+            // Check collision with other cars
+            pthread_mutex_lock(&playingGame.mutexFile);
+            queue<Car> temp = playingGame.cars;
+            pthread_mutex_unlock(&playingGame.mutexFile);
+            while (!temp.empty()) {
+                if (checkCollision(playingGame.current, temp.front())) {
+                    playingGame.IsGameRunning = false; // Oyunu sonlandýr
+                    updatePointsFile(playingGame.points); // Puaný dosyaya yaz
+                    Menu(); // Return to the main menu
+                    break; // Döngüden çýk
+                }
+                temp.pop(); // Kuyruktaki bir sonraki arabaya geç
+            }
+        }
+        usleep(GAMESLEEPRATE); // Sleep for a short period
+    }
+    return NULL;
+    // Load game logic here
+}
 
 
 
