@@ -279,7 +279,7 @@ void moveAndDrawCars() {
 }
 
 
-// SENA - SEFA
+// SEFA - SENA
 void* newGame(void *) {
     initGame(); // Oyun başladığında initGame fonksiyonu çağrılacak
 
@@ -291,6 +291,7 @@ void* newGame(void *) {
     int key;
     while (playingGame.IsGameRunning) { // Continue until the game is over
         key = getch(); // Get input for the player to press the arrow keys
+		queue<Car> temp = playingGame.cars;
         if (key != KEYERROR) {
             if (key == playingGame.leftKey) { // If the left key is pressed
                 drawCar(playingGame.current, 1, 1); // Removes player's car from screen
@@ -309,7 +310,7 @@ void* newGame(void *) {
                 playingGame.IsGameRunning = false; 
                 updatePointsFile(playingGame.points);
 		
-		pthread_mutex_lock(&playingGame.mutexFile);
+				pthread_mutex_lock(&playingGame.mutexFile);
                 saveGame(playingGame);   // Saves the info neccessary to load the game back
                 pthread_mutex_unlock(&playingGame.mutexFile);
                 Menu(); // Return to the main menu
@@ -317,9 +318,11 @@ void* newGame(void *) {
 
             // Check collision with other cars
             pthread_mutex_lock(&playingGame.mutexFile);
-            queue<Car> temp = playingGame.cars;
+            
             pthread_mutex_unlock(&playingGame.mutexFile);
-            while (!temp.empty()) {
+            
+        }
+		while (!temp.empty()) {
                 if (checkCollision(playingGame.current, temp.front())) {
                     playingGame.IsGameRunning = false; // Oyunu sonlandır
                     updatePointsFile(playingGame.points); // Puanı dosyaya yaz
@@ -327,7 +330,6 @@ void* newGame(void *) {
                     break; // Döngüden çık
                 }
                 temp.pop(); // Kuyruktaki bir sonraki arabaya geç
-            }
         }
         usleep(GAMESLEEPRATE); // Sleep for a short period
     }
@@ -593,8 +595,10 @@ void* loadGame(void*) {
     pthread_mutex_unlock(&playingGame.mutexFile);
 	
     int key;
+	
     while (playingGame.IsGameRunning) {// Continue until the game is over
         key = getch(); // Get input for the player to press the arrow keys
+		queue<Car> temp = playingGame.cars;
         if (key != KEYERROR) {
             if (key == playingGame.leftKey) { // If the left key is pressed
                 drawCar(playingGame.current, 1, 1); // Removes player's car from screen
@@ -623,9 +627,11 @@ void* loadGame(void*) {
 
             // Check collision with other cars
             pthread_mutex_lock(&playingGame.mutexFile);
-            queue<Car> temp = playingGame.cars;
+            
             pthread_mutex_unlock(&playingGame.mutexFile);
-            while (!temp.empty()) {
+            
+        }
+		while (!temp.empty()) {
                 if (checkCollision(playingGame.current, temp.front())) {
                     playingGame.IsGameRunning = false; // Oyunu sonlandýr
                     updatePointsFile(playingGame.points); // Puaný dosyaya yaz
@@ -633,7 +639,6 @@ void* loadGame(void*) {
                     break; // Döngüden çýk
                 }
                 temp.pop(); // Kuyruktaki bir sonraki arabaya geç
-            }
         }
         usleep(GAMESLEEPRATE); // Sleep for a short period
     }
